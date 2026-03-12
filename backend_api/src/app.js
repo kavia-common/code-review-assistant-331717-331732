@@ -70,12 +70,49 @@ app.use(express.json());
 // Mount routes
 app.use('/', routes);
 
-// Error handling middleware
+/**
+ * Error handling middleware
+ *
+ * Goals:
+ * - Provide actionable errors for common operational failures (e.g., DB schema not migrated)
+ * - Avoid leaking secrets or internal stack traces to clients
+ * - Keep logs rich enough to debug in production
+ */
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
+  const isPgError = err && typeof err === 'object' && typeof err.code === 'string';
+
+  // Postgres: undefined_table (missing relation) => most commonly migrations not applied.
+  // https://www.postgresql.org/docs/current/errcodes-appendix.html
+  if (isPgError && err.code === '42P01') {
+    console.error('[error] postgres.undefined_table', {
+      code: err.code,
+      message: err.message,
+      routine: err.routine,
+      where: err.where,
+      detail: err.detail,
+    });
+
+    return res.status(503).json({
+      status: 'error',
+      message:
+        'Database schema is not ready (missing table). Apply DB migrations and retry.',
+    });
+  }
+
+  // If upstream middleware sets a statusCode, respect it.
+  const statusCode =
+    typeof err.statusCode === 'number' && err.statusCode >= 400 ? err.statusCode : 500;
+
+  console.error('[error] unhandled', {
+    statusCode,
+    message: err && err.message ? err.message : String(err),
+    stack: err && err.stack ? err.stack : undefined,
+    pgCode: isPgError ? err.code : undefined,
+  });
+
+  return res.status(statusCode).json({
     status: 'error',
-    message: 'Internal Server Error',
+    message: statusCode === 500 ? 'Internal Server Error' : err.message,
   });
 });
 
