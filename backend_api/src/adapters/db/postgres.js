@@ -4,6 +4,37 @@ const { Pool } = require('pg');
 
 let pool = null;
 
+/**
+ * Parse POSTGRES_URL which may be either:
+ * - a full connection string (e.g. "postgresql://localhost:5000/myapp"), OR
+ * - a hostname (e.g. "localhost")
+ *
+ * We support both to avoid fragile runtime coupling across containers/environments.
+ */
+function parsePostgresUrl(urlValue) {
+  if (!urlValue || typeof urlValue !== 'string') return null;
+
+  const trimmed = urlValue.trim();
+  if (!trimmed) return null;
+
+  // If it looks like a URL, parse it.
+  if (/^postgres(ql)?:\/\//i.test(trimmed)) {
+    // URL parsing is safe and built-in in Node.js.
+    const { URL } = require('url');
+    const u = new URL(trimmed);
+
+    return {
+      host: u.hostname,
+      port: u.port ? Number(u.port) : null,
+      databaseFromUrl: u.pathname ? u.pathname.replace(/^\//, '') : null,
+      ssl: u.searchParams.get('sslmode') === 'require',
+    };
+  }
+
+  // Otherwise treat it as a hostname.
+  return { host: trimmed, port: null, databaseFromUrl: null, ssl: false };
+}
+
 // PUBLIC_INTERFACE
 function initPostgresPool(config) {
   /**
@@ -11,20 +42,30 @@ function initPostgresPool(config) {
    *
    * Contract:
    * - Inputs: config.postgres.{url,user,password,db,port}
+   *   - url may be a hostname OR a full connection string (postgresql://...)
    * - Side effects: creates a singleton connection pool.
-   * - Errors: throws if called twice with different parameters (guarded by singleton).
+   * - Errors: throws if called before config is validated (loadConfig does validation).
    */
   if (pool) {
     return pool;
   }
 
-  // NOTE: db_connection.txt shows a canonical connection string, but we must use env vars per platform rules.
+  const parsed = parsePostgresUrl(config.postgres.url);
+  if (!parsed || !parsed.host) {
+    throw new Error('Invalid POSTGRES_URL: expected hostname or postgresql:// connection string');
+  }
+
+  const finalPort = Number.isFinite(parsed.port) ? parsed.port : config.postgres.port;
+  const finalDb = parsed.databaseFromUrl || config.postgres.db;
+
+  // We intentionally do NOT read env vars here; all config comes from `loadConfig()`.
   pool = new Pool({
-    host: config.postgres.url,
+    host: parsed.host,
     user: config.postgres.user,
     password: config.postgres.password,
-    database: config.postgres.db,
-    port: config.postgres.port,
+    database: finalDb,
+    port: finalPort,
+    ssl: parsed.ssl || false,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
