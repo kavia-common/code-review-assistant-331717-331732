@@ -8,15 +8,17 @@ async function createReviewFlow({ userId, language, code, title }, { aiReviewer 
    * CreateReviewFlow
    *
    * Contract:
-   * - Inputs: {userId, language, code, title?}
+   * - Inputs: { userId?: number|null, language, code, title? }
+   *   - userId is optional to support anonymous reviews when auth is disabled in the UI.
    * - Output: { reviewId, review, result }
    * - Side effects: inserts into public.reviews and public.review_results
    * - Errors: bubbles up DB / AI adapter errors (with boundary mapping in controller)
    */
-  console.log(`[flow] CreateReviewFlow start userId=${userId} language=${language}`);
+  const safeUserId = Number.isFinite(userId) ? userId : null;
+  console.log(`[flow] CreateReviewFlow start userId=${safeUserId || 'anonymous'} language=${language}`);
 
   const review = await reviewsRepo.createReview({
-    userId,
+    userId: safeUserId,
     language,
     code,
     title,
@@ -34,7 +36,9 @@ async function createReviewFlow({ userId, language, code, title }, { aiReviewer 
     model: aiResult.model,
   });
 
-  console.log(`[flow] CreateReviewFlow success userId=${userId} reviewId=${review.id}`);
+  console.log(
+    `[flow] CreateReviewFlow success userId=${safeUserId || 'anonymous'} reviewId=${review.id}`
+  );
   return { reviewId: review.id, review, result };
 }
 

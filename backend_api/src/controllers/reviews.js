@@ -14,8 +14,7 @@ class ReviewsController {
    *   post:
    *     tags: [Reviews]
    *     summary: Submit code for AI review
-   *     security:
-   *       - bearerAuth: []
+   *     description: Creates a review and generates an AI result. Authentication is optional; anonymous reviews are supported.
    *     requestBody:
    *       required: true
    *       content:
@@ -36,13 +35,13 @@ class ReviewsController {
    *     responses:
    *       201:
    *         description: Review created and result generated
-   *       401:
-   *         description: Unauthorized
    */
   async create(req, res, next) {
     try {
       const { language, code, title } = req.body;
-      const userId = req.user.id;
+
+      // Auth is optional; req.user may be null.
+      const userId = req.user ? req.user.id : null;
 
       const flowResult = await createReviewFlow(
         { userId, language, code, title },
@@ -71,9 +70,8 @@ class ReviewsController {
    * /reviews:
    *   get:
    *     tags: [Reviews]
-   *     summary: List review history for the authenticated user
-   *     security:
-   *       - bearerAuth: []
+   *     summary: List review history
+   *     description: If authenticated, lists reviews for the current user. Otherwise, returns the latest reviews (including anonymous).
    *     parameters:
    *       - in: query
    *         name: limit
@@ -91,15 +89,15 @@ class ReviewsController {
    *     responses:
    *       200:
    *         description: List of reviews
-   *       401:
-   *         description: Unauthorized
    */
   async list(req, res, next) {
     try {
-      const userId = req.user.id;
       const { limit, offset } = req.query;
 
-      const rows = await reviewsRepo.listReviewsByUser({ userId, limit, offset });
+      const rows = req.user
+        ? await reviewsRepo.listReviewsByUser({ userId: req.user.id, limit, offset })
+        : await reviewsRepo.listReviews({ limit, offset });
+
       const items = rows.map((r) => ({
         id: r.review_id,
         language: r.language,
@@ -131,8 +129,7 @@ class ReviewsController {
    *   get:
    *     tags: [Reviews]
    *     summary: Get a single review by id
-   *     security:
-   *       - bearerAuth: []
+   *     description: If authenticated, enforces that the review belongs to the current user. Otherwise, fetches by id without ownership enforcement.
    *     parameters:
    *       - in: path
    *         name: id
@@ -142,17 +139,17 @@ class ReviewsController {
    *     responses:
    *       200:
    *         description: Review detail (including code and AI result)
-   *       401:
-   *         description: Unauthorized
    *       404:
    *         description: Not found
    */
   async getById(req, res, next) {
     try {
-      const userId = req.user.id;
       const reviewId = Number(req.params.id);
 
-      const row = await reviewsRepo.getReviewByIdForUser({ reviewId, userId });
+      const row = req.user
+        ? await reviewsRepo.getReviewByIdForUser({ reviewId, userId: req.user.id })
+        : await reviewsRepo.getReviewById({ reviewId });
+
       if (!row) {
         return res.status(404).json({ status: 'error', message: 'Review not found' });
       }

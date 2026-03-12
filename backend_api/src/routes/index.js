@@ -6,7 +6,7 @@ const { AuthController } = require('../controllers/auth');
 const { ReviewsController } = require('../controllers/reviews');
 const { getSchemas } = require('../validation/schemas');
 const { validate } = require('../middleware/validate');
-const { requireAuth } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/optionalAuth');
 
 const router = express.Router();
 const schemas = getSchemas();
@@ -67,13 +67,13 @@ router.post(
   }
 );
 
-// Review routes (protected)
+// Review routes (auth optional)
 router.post(
   '/review',
   validate({ bodySchema: schemas.createReview }),
   async (req, res, next) => {
     const { config, aiReviewer } = getDeps(req);
-    return requireAuth(config)(req, res, (err) => {
+    return optionalAuth(config)(req, res, (err) => {
       if (err) return next(err);
       const controller = new ReviewsController({ aiReviewer });
       return controller.create(req, res, next);
@@ -86,7 +86,7 @@ router.get(
   validate({ querySchema: schemas.getReviewsQuery }),
   async (req, res, next) => {
     const { config, aiReviewer } = getDeps(req);
-    return requireAuth(config)(req, res, (err) => {
+    return optionalAuth(config)(req, res, (err) => {
       if (err) return next(err);
       const controller = new ReviewsController({ aiReviewer });
       return controller.list(req, res, next);
@@ -99,7 +99,7 @@ router.get(
   validate({ paramsSchema: schemas.reviewIdParam }),
   async (req, res, next) => {
     const { config, aiReviewer } = getDeps(req);
-    return requireAuth(config)(req, res, (err) => {
+    return optionalAuth(config)(req, res, (err) => {
       if (err) return next(err);
       const controller = new ReviewsController({ aiReviewer });
       return controller.getById(req, res, next);

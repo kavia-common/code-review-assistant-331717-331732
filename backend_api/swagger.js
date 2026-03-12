@@ -7,7 +7,7 @@ const options = {
       title: 'Code Review Assistant API',
       version: '1.0.0',
       description:
-        'Backend API for authentication and AI-powered code review. Use /auth/login to obtain a JWT, then pass it as `Authorization: Bearer <token>`.',
+        'Backend API for authentication and AI-powered code review. Authentication is optional for review endpoints; if you do login, you may pass `Authorization: Bearer <token>` to scope history to your user.',
     },
     tags: [
       { name: 'Health', description: 'Service health endpoints' },
